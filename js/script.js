@@ -4,7 +4,19 @@ import { loginUser, signUpUser, logoutUser, checkAuthState } from './auth.js';
 import { loadFaqsFromFirebase, getFaqAnswer } from './faq.js';
 import { aiModels } from './aiModels.js';
 import { initializeThemeToggle } from './theme.js';
+import { cerebrasAPI } from './cerebras.js';
+
 import { ref, set, get, push, remove } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
+
+// Firebase initialization check
+const checkFirebaseInit = () => {
+    try {
+        return auth && database;
+    } catch (error) {
+        console.error('Error checking Firebase initialization:', error);
+        return false;
+    }
+};
 
 class ChatInterface {
     constructor() {
@@ -54,7 +66,21 @@ class ChatInterface {
 
         this.auth = auth;
         this.database = database;
-        console.log("Firebase initialized successfully");
+        
+        // Firebase initialization check
+        if (checkFirebaseInit()) {
+            console.log("✅ Firebase initialized successfully");
+            this.firebaseConfigured = true;
+        } else {
+            console.log("❌ Firebase initialization failed");
+            this.firebaseConfigured = false;
+        }
+        
+        // Set default configuration values
+        this.appName = 'Prudence AI';
+        this.maxChatHistory = 20;
+        this.maxMessageLength = 1000;
+        this.maxAiModels = 3;
 
         this.initializeEventListeners();
         this.initializeCarousel();
@@ -504,7 +530,7 @@ class ChatInterface {
         this.handleCompareMode(message);
     }
 
-    handleSingleResponse(message) {
+    async handleSingleResponse(message) {
         this.showTypingIndicator();
 
         const botId = this.selectedBots[0];
@@ -515,9 +541,9 @@ class ChatInterface {
             return;
         }
 
-        setTimeout(() => {
+        setTimeout(async () => {
             this.hideTypingIndicator();
-            const response = this.generateAIResponse(message, botId);
+            const response = await this.generateAIResponse(message, botId);
             this.addMessage(response, 'ai', botId);
             this.sendButton.disabled = false;
         }, Math.random() * 2000 + 1000);
@@ -544,8 +570,8 @@ class ChatInterface {
             `;
             this.compareResponses.appendChild(responseDiv);
 
-            setTimeout(() => {
-                const response = this.generateAIResponse(message, botId);
+            setTimeout(async () => {
+                const response = await this.generateAIResponse(message, botId);
                 responseDiv.querySelector('.compare-response-content').innerHTML = response;
                 
                 // Add the AI response to messages array for saving to Firebase
@@ -619,13 +645,36 @@ class ChatInterface {
         if (typingIndicator) typingIndicator.remove();
     }
 
-    generateAIResponse(userMessage, botId) {
+    async generateAIResponse(userMessage, botId) {
         const model = this.aiModels[botId];
         const lowerMessage = userMessage.toLowerCase();
 
+        // Check for FAQ answer first
         const faqAnswer = this.getFaqAnswer(userMessage, this.faqs, this.personalityFaqs);
         if (faqAnswer) return faqAnswer;
 
+        // Handle Cerebras API calls
+        if (botId === 'cerebras') {
+            try {
+                console.log('🤖 Calling Cerebras API for response...');
+                const cerebrasResult = await cerebrasAPI.generateResponse(userMessage, {
+                    maxTokens: 1000,
+                    temperature: 0.7
+                });
+                
+                if (cerebrasResult.success) {
+                    return cerebrasResult.text;
+                } else {
+                    console.error('Cerebras API error:', cerebrasResult.error);
+                    return `Sorry, I couldn't get a response from Cerebras: ${cerebrasResult.error}`;
+                }
+            } catch (error) {
+                console.error('Error calling Cerebras API:', error);
+                return `Sorry, there was an error connecting to Cerebras: ${error.message}`;
+            }
+        }
+
+        // Handle other AI models with predefined responses
         if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
             return `Hello! I'm ${model.name}, your AI assistant. ${model.description}. How can I help you today?`;
         } else if (lowerMessage.includes('how are you')) {

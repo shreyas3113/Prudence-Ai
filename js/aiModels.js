@@ -17,6 +17,12 @@ export const aiModels = {
         description: "Creative and innovative thinking", 
         responses: ["Here's a creative take!", "Imagination is key. Let me think...", "Let's explore that idea."] 
     },
+    "cerebras": { 
+        name: "Cerebras", 
+        icon: "🧠", 
+        description: "Cerebras Large Language Model", 
+        responses: ["Processing with Cerebras...", "Let me analyze this with my advanced capabilities.", "Here's my response from Cerebras."] 
+    },
     "perplexity": { 
         name: "Perplexity", 
         icon: "📚", 
