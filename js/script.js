@@ -1,0 +1,903 @@
+// script.js
+import { auth, database } from './firebase.js';
+import { loginUser, signUpUser, logoutUser, checkAuthState } from './auth.js';
+import { loadFaqsFromFirebase, getFaqAnswer } from './faq.js';
+import { aiModels } from './aiModels.js';
+import { initializeThemeToggle } from './theme.js';
+import { ref, set, get, push, remove } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
+
+class ChatInterface {
+    constructor() {
+        // Enable compareMode by default
+        this.compareMode = true;
+        // Default selected bots for ensemble mode
+        this.selectedBots = ['gpt-4', 'claude', 'gemini'];
+
+        // Always activate ensemble toggle and container
+        if (this.compareToggle) this.compareToggle.classList.add('active');
+        if (this.compareContainer) this.compareContainer.classList.add('active');
+
+        this.chatMessages = document.getElementById('chatMessages');
+        this.messageInput = document.getElementById('messageInput');
+        this.sendButton = document.getElementById('sendButton');
+        this.newChatButton = document.getElementById('newChatButton');
+        this.chatHistoryList = document.getElementById('chatHistoryList');
+        this.sidebarToggle = document.getElementById('sidebarToggle');
+        this.sidebar = document.querySelector('.sidebar');
+        this.botsPanel = document.getElementById('botsPanel');
+        this.botsGrid = document.getElementById('botsGrid');
+        this.botsToggle = document.getElementById('botsToggle');
+        this.compareToggle = document.getElementById('compareToggle');
+        this.compareContainer = document.getElementById('compareContainer');
+        this.compareResponses = document.getElementById('compareResponses');
+        this.chatTitle = document.getElementById('chatTitle');
+        this.carouselTrack = document.getElementById('carouselTrack');
+        this.carouselPrev = document.getElementById('carouselPrev');
+        this.carouselNext = document.getElementById('carouselNext');
+        this.authButtons = document.getElementById('authButtons');
+        this.authModal = document.getElementById('authModal');
+        this.modalTitle = document.getElementById('modalTitle');
+        this.modalEmail = document.getElementById('modalEmail');
+        this.modalPassword = document.getElementById('modalPassword');
+        this.modalSubmit = document.getElementById('modalSubmit');
+        this.modalClose = document.getElementById('modalClose');
+        this.toggleModalAuth = document.getElementById('toggleModalAuth');
+        this.logoutBtn = document.querySelector('.logout-btn');
+
+        this.currentChatId = null;
+        this.chatHistory = [];
+        this.messages = [];
+        this.faqs = [];
+        this.personalityFaqs = [];
+
+        this.aiModels = aiModels;
+
+        this.auth = auth;
+        this.database = database;
+        console.log("Firebase initialized successfully");
+
+        this.initializeEventListeners();
+        this.initializeCarousel();
+        this.renderChatHistory();
+        this.startNewChat();
+        this.updateBotSelection();
+        this.hideChatArea(); // Show login message initially
+        this.checkAuthState();
+        this.loadFaqsFromFirebase();
+    }
+
+    // Authentication Methods
+    checkAuthState() {
+        checkAuthState((user) => {
+            if (user) {
+                this.authButtons.querySelector('.login-btn').style.display = 'none';
+                this.authButtons.querySelector('.signup-btn').style.display = 'none';
+                this.authButtons.querySelector('.logout-btn').style.display = 'block';
+                this.loadChatHistoryFromFirebase(user.uid);
+                this.showChatArea();
+            } else {
+                this.authButtons.querySelector('.login-btn').style.display = 'block';
+                this.authButtons.querySelector('.signup-btn').style.display = 'block';
+                this.authButtons.querySelector('.logout-btn').style.display = 'none';
+                this.hideChatArea();
+            }
+        });
+    }
+
+    showAuthModal(isLogin = true) {
+        this.authModal.style.display = 'block';
+        this.modalTitle.textContent = isLogin ? 'Login' : 'Sign Up';
+        this.modalSubmit.textContent = isLogin ? 'Login' : 'Sign Up';
+        // Clear any previous success message
+        const successMessage = this.authModal.querySelector('.success-message');
+        if (successMessage) successMessage.remove();
+    }
+
+    hideAuthModal() {
+        this.authModal.style.display = 'none';
+        this.modalEmail.value = '';
+        this.modalPassword.value = '';
+        // Clear success message when closing
+        const successMessage = this.authModal.querySelector('.success-message');
+        if (successMessage) successMessage.remove();
+    }
+
+    loginUser(email, password) {
+        loginUser(email, password,
+            (userCredential) => {
+                console.log("User signed in with UID:", userCredential.user.uid);
+                // Add welcome message to chat interface
+                this.addMessage(`Welcome ${email.split('@')[0]}! You have successfully logged in.`, 'ai');
+                // Hide modal
+                this.hideAuthModal();
+            },
+            (error) => {
+                console.error("Error signing in:", error.code, error.message);
+                // Add error message to the modal
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.style.cssText = 'color: red; text-align: center; margin-top: 10px;';
+                errorDiv.textContent = `Error: ${error.message}`;
+                this.authModal.querySelector('div').appendChild(errorDiv);
+                setTimeout(() => {
+                    if (errorDiv.parentNode) errorDiv.remove();
+                }, 3000);
+            }
+        );
+    }
+
+    signUpUser(email, password) {
+        signUpUser(email, password,
+            (userCredential) => {
+                const userId = userCredential.user.uid;
+                set(ref(this.database, 'users/' + userId), { email: email })
+                    .then(() => {
+                        console.log("User signed up and data saved with UID:", userId);
+                        // Add welcome message to chat interface
+                        this.addMessage(`Welcome ${email.split('@')[0]}! You have successfully signed up.`, 'ai');
+                        // Auto-login and hide modal
+                        loginUser(email, password,
+                            () => this.hideAuthModal(),
+                            (error) => {
+                                console.error("Error signing in after signup:", error.message);
+                                const errorDiv = document.createElement('div');
+                                errorDiv.className = 'error-message';
+                                errorDiv.style.cssText = 'color: red; text-align: center; margin-top: 10px;';
+                                errorDiv.textContent = `Error: ${error.message}`;
+                                this.authModal.querySelector('div').appendChild(errorDiv);
+                                setTimeout(() => {
+                                    if (errorDiv.parentNode) errorDiv.remove();
+                                }, 3000);
+                            }
+                        );
+                    })
+                    .catch((error) => {
+                        console.error("Error saving data or signing in:", error.message);
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'error-message';
+                        errorDiv.style.cssText = 'color: red; text-align: center; margin-top: 10px;';
+                        errorDiv.textContent = `Error: ${error.message}`;
+                        this.authModal.querySelector('div').appendChild(errorDiv);
+                        setTimeout(() => {
+                            if (errorDiv.parentNode) errorDiv.remove();
+                        }, 3000);
+                    });
+            },
+            (error) => {
+                console.error("Error signing up:", error.code, error.message);
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.style.cssText = 'color: red; text-align: center; margin-top: 10px;';
+                errorDiv.textContent = `Error: ${error.message}`;
+                this.authModal.querySelector('div').appendChild(errorDiv);
+                setTimeout(() => {
+                    if (errorDiv.parentNode) errorDiv.remove();
+                }, 3000);
+            }
+        );
+    }
+
+    logoutUser() {
+        logoutUser(
+            () => {
+                console.log("User signed out");
+                this.hideChatArea(); // Show login message after logout
+            },
+            (error) => {
+                console.error("Error signing out:", error.message);
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.style.cssText = 'color: red; text-align: center; margin-top: 10px;';
+                errorDiv.textContent = `Error: ${error.message}`;
+                this.authModal.querySelector('div').appendChild(errorDiv);
+                setTimeout(() => {
+                    if (errorDiv.parentNode) errorDiv.remove();
+                }, 3000);
+            }
+        );
+    }
+
+    // FAQ Methods - Updated to use imported functions
+    loadFaqsFromFirebase() {
+        loadFaqsFromFirebase(
+            (faqs) => {
+                this.faqs = faqs;
+            },
+            (personalityFaqs) => {
+                this.personalityFaqs = personalityFaqs;
+            }
+        );
+    }
+
+    getFaqAnswer(message) {
+        return getFaqAnswer(message, this.faqs, this.personalityFaqs);
+    }
+
+
+
+
+
+    // Firebase Chat History Methods
+    loadChatHistoryFromFirebase(userId) {
+        get(ref(this.database, `users/${userId}/chatHistory`))
+            .then((snapshot) => {
+                if (snapshot.exists()) {
+                    this.chatHistory = snapshot.val();
+                    this.renderChatHistory();
+                } else {
+                    this.chatHistory = [];
+                    this.renderChatHistory();
+                }
+            })
+            .catch((error) => {
+                console.error("Error loading chat history:", error);
+                this.chatHistory = [];
+                this.renderChatHistory();
+            });
+    }
+
+    saveChatHistoryToFirebase() {
+        const user = this.auth.currentUser;
+        if (!user) return;
+
+        if (this.messages.length > 0) {
+            const existingChatIndex = this.chatHistory.findIndex(chat => chat.id === this.currentChatId);
+            const chatData = {
+                id: this.currentChatId,
+                title: this.messages[0].content.substring(0, 30) + (this.messages[0].content.length > 30 ? '...' : ''),
+                messages: this.messages,
+                lastUpdated: Date.now()
+            };
+
+            if (existingChatIndex !== -1) {
+                this.chatHistory[existingChatIndex] = chatData;
+            } else {
+                this.chatHistory.unshift(chatData);
+            }
+
+            // Keep only the last 20 chats
+            this.chatHistory = this.chatHistory.slice(0, 20);
+
+            // Save to Firebase
+            set(ref(this.database, `users/${user.uid}/chatHistory`), this.chatHistory)
+                .then(() => {
+                    console.log("Chat history saved to Firebase");
+                })
+                .catch((error) => {
+                    console.error("Error saving chat history to Firebase:", error);
+                });
+
+            this.renderChatHistory();
+        }
+    }
+
+    deleteChatFromFirebase(chatId) {
+        const user = this.auth.currentUser;
+        if (!user) return;
+
+        this.chatHistory = this.chatHistory.filter(chat => chat.id !== chatId);
+        
+        set(ref(this.database, `users/${user.uid}/chatHistory`), this.chatHistory)
+            .then(() => {
+                console.log("Chat deleted from Firebase");
+                this.renderChatHistory();
+            })
+            .catch((error) => {
+                console.error("Error deleting chat from Firebase:", error);
+            });
+    }
+
+    // Existing Methods (with minor adjustments)
+    formatAnswer(text) {
+        return text
+            .replace(/```html([\s\S]*?)```/g, '<pre><code class="language-html">$1</code></pre>')
+            .replace(/```css([\s\S]*?)```/g, '<pre><code class="language-css">$1</code></pre>')
+            .replace(/```javascript([\s\S]*?)```/g, '<pre><code class="language-javascript">$1</code></pre>')
+            .replace(/```scss([\s\S]*?)```/g, '<pre><code class="language-scss">$1</code></pre>')
+            .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+            .replace(/\n/g, '<br>');
+    }
+
+    initializeEventListeners() {
+        if (this.sendButton) {
+            this.sendButton.addEventListener('click', () => this.sendMessage());
+        }
+        if (this.messageInput) {
+            this.messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.sendMessage();
+            });
+        }
+        if (this.newChatButton) {
+            this.newChatButton.addEventListener('click', () => this.startNewChat());
+        }
+        if (this.sidebarToggle) {
+            this.sidebarToggle.addEventListener('click', () => this.toggleSidebar());
+        }
+        if (this.botsToggle) {
+            this.botsToggle.addEventListener('click', () => this.toggleBotsPanel());
+        }
+        if (this.compareToggle) {
+            this.compareToggle.addEventListener('click', () => this.toggleCompareMode());
+        }
+
+        if (this.botsGrid) {
+            this.botsGrid.addEventListener('click', (e) => {
+                e.preventDefault();
+                alert("Please select models using the bottom Quick Select AI section.");
+            });
+        }
+
+        const closeBots = document.querySelector('.close-bots');
+        if (closeBots) {
+            closeBots.addEventListener('click', () => {
+                if (this.botsPanel) this.botsPanel.classList.remove('active');
+                if (this.botsToggle) this.botsToggle.classList.remove('active');
+            });
+        }
+
+        if (this.carouselPrev) {
+            this.carouselPrev.addEventListener('click', () => this.scrollCarousel('prev'));
+        }
+        if (this.carouselNext) {
+            this.carouselNext.addEventListener('click', () => this.scrollCarousel('next'));
+        }
+
+        document.querySelector('.login-btn').addEventListener('click', () => this.showAuthModal(true));
+        document.querySelector('.signup-btn').addEventListener('click', () => this.showAuthModal(false));
+        this.modalSubmit.addEventListener('click', () => {
+            const email = this.modalEmail.value.trim();
+            const password = this.modalPassword.value.trim();
+            if (!email || !password) {
+                alert("Email and password are required");
+                return;
+            }
+            if (this.modalTitle.textContent === 'Login') {
+                this.loginUser(email, password);
+            } else {
+                this.signUpUser(email, password);
+            }
+        });
+        this.modalClose.addEventListener('click', () => this.hideAuthModal());
+        this.toggleModalAuth.addEventListener('click', () => this.showAuthModal(this.modalTitle.textContent === 'Sign Up'));
+        this.logoutBtn.addEventListener('click', () => this.logoutUser());
+        
+
+
+        document.addEventListener('click', (e) => {
+            if (this.botsPanel && this.botsToggle && 
+                !this.botsPanel.contains(e.target) && !this.botsToggle.contains(e.target)) {
+                this.botsPanel.classList.remove('active');
+                this.botsToggle.classList.remove('active');
+            }
+        });
+    }
+
+    toggleSidebar() {
+        if (this.sidebar) this.sidebar.classList.toggle('active');
+    }
+
+    toggleBotsPanel() {
+        if (this.botsPanel) this.botsPanel.classList.toggle('active');
+        if (this.botsToggle) this.botsToggle.classList.toggle('active');
+    }
+
+    toggleCompareMode() {
+        // Ensemble Mode is permanently enabled - no toggling allowed
+        this.compareMode = true;
+        if (this.compareToggle) this.compareToggle.classList.add('active');
+        if (this.compareContainer) this.compareContainer.classList.add('active');
+
+        // Ensure we have at least 2 bots selected for ensemble mode
+        if (this.selectedBots.length < 2) {
+            this.selectedBots = ['gpt-4', 'claude'];
+        }
+
+        this.updateBotSelection();
+    }
+
+    toggleBotSelection(botId) {
+        const previousBots = [...this.selectedBots];
+
+        // Always work in ensemble mode (compare mode)
+        if (this.selectedBots.includes(botId)) {
+            this.selectedBots = this.selectedBots.filter(id => id !== botId);
+        } else if (this.selectedBots.length < 3) {
+            this.selectedBots.push(botId);
+        }
+
+        // If bots changed and there are messages, save and start new chat
+        const botsChanged = previousBots.sort().join(',') !== this.selectedBots.sort().join(',');
+        if (botsChanged && this.messages.length > 0) {
+            this.saveChatHistory();
+            this.startNewChat();
+        }
+
+        this.updateBotSelection();
+        this.updateCarouselSelection();
+
+        const botsPanelVisible = this.botsPanel?.classList.contains("active");
+        if (botsPanelVisible) {
+            this.botsPanel.classList.remove("active");
+            this.botsToggle?.classList.remove("active");
+        }
+    }
+
+    updateBotSelection() {
+        const limitReached = this.selectedBots.length >= 3;
+
+        const botsGrid = document.getElementById('botsGrid');
+        if (botsGrid) {
+            botsGrid.innerHTML = '';
+            this.selectedBots.forEach(botId => {
+                const model = this.aiModels[botId];
+                if (!model) return;
+
+                const card = document.createElement('div');
+                card.className = 'bot-card selected';
+                card.dataset.bot = botId;
+                card.innerHTML = `
+                    <div class="bot-icon">${model.icon}</div>
+                    <div class="bot-name">${model.name}</div>
+                    <div class="bot-description">${model.description}</div>
+                `;
+                botsGrid.appendChild(card);
+            });
+
+            if (this.selectedBots.length === 0) {
+                botsGrid.innerHTML = `<p style="padding: 1rem; color: #999;">No AI models selected. Choose from below.</p>`;
+            }
+        }
+
+        if (this.carouselTrack) {
+            const cards = this.carouselTrack.querySelectorAll('.carousel-bot-card');
+            cards.forEach(card => {
+                const selected = this.selectedBots.includes(card.dataset.bot);
+                card.classList.toggle('selected', selected);
+                card.classList.toggle('disabled', limitReached && !selected);
+            });
+        }
+    }
+
+    startNewChat() {
+        this.currentChatId = 'chat_' + Date.now();
+        this.messages = [];
+        if (this.chatMessages) {
+            this.chatMessages.innerHTML = `
+                <div class="welcome-message">
+                    <div class="welcome-content">
+                        <h2>Welcome to AI Chat Interface</h2>
+                        <p>Start a conversation with your AI assistant. Ensemble mode is always active - you'll see responses from multiple AI models simultaneously.</p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        if (this.compareResponses) this.compareResponses.innerHTML = '';
+        if (this.messageInput) this.messageInput.focus();
+
+        // Ensure ensemble mode is always active
+        this.compareMode = true;
+        if (this.compareToggle) this.compareToggle.classList.add('active');
+        if (this.compareContainer) this.compareContainer.classList.add('active');
+
+        this.updateBotSelection();
+    }
+
+    sendMessage() {
+        const message = this.messageInput.value.trim();
+        if (!message) return;
+
+        if (!this.selectedBots || this.selectedBots.length === 0) {
+            this.addMessage("Please select an AI model before sending a message.", 'ai');
+            this.messageInput.value = '';
+            return;
+        }
+
+        const welcomeMessage = this.chatMessages.querySelector('.welcome-message');
+        if (welcomeMessage) welcomeMessage.remove();
+
+        this.addMessage(message, 'user');
+        this.messageInput.value = '';
+        this.sendButton.disabled = true;
+
+        // Always use ensemble mode
+        this.handleCompareMode(message);
+    }
+
+    handleSingleResponse(message) {
+        this.showTypingIndicator();
+
+        const botId = this.selectedBots[0];
+        if (!botId || !this.aiModels[botId]) {
+            this.hideTypingIndicator();
+            this.addMessage("No valid AI model selected. Please choose a model.", 'ai');
+            this.sendButton.disabled = false;
+            return;
+        }
+
+        setTimeout(() => {
+            this.hideTypingIndicator();
+            const response = this.generateAIResponse(message, botId);
+            this.addMessage(response, 'ai', botId);
+            this.sendButton.disabled = false;
+        }, Math.random() * 2000 + 1000);
+    }
+
+    handleCompareMode(message) {
+        this.compareResponses.innerHTML = '';
+        
+        this.selectedBots.forEach((botId, index) => {
+            const responseDiv = document.createElement('div');
+            responseDiv.className = 'compare-response';
+            responseDiv.innerHTML = `
+                <div class="compare-response-header">
+                    <div class="compare-response-icon">${this.aiModels[botId].icon}</div>
+                    <div class="compare-response-name">${this.aiModels[botId].name}</div>
+                </div>
+                <div class="compare-response-content">
+                    <div class="typing-indicator">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            `;
+            this.compareResponses.appendChild(responseDiv);
+
+            setTimeout(() => {
+                const response = this.generateAIResponse(message, botId);
+                responseDiv.querySelector('.compare-response-content').innerHTML = response;
+                
+                // Add the AI response to messages array for saving to Firebase
+                this.messages.push({
+                    content: response,
+                    sender: 'ai',
+                    botId: botId,
+                    timestamp: Date.now()
+                });
+                
+                if (index === this.selectedBots.length - 1) {
+                    this.sendButton.disabled = false;
+                    // Save chat history after all responses are complete
+                    this.saveChatHistory();
+                }
+            }, Math.random() * 2000 + 1000 + (index * 500));
+        });
+    }
+
+    addMessage(content, sender, botId = null) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${sender}-message`;
+
+        const currentTime = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        if (sender === 'user') {
+            messageDiv.innerHTML = `
+                <div class="message-content">${this.escapeHtml(content)}</div>
+                <div class="message-time">${currentTime}</div>
+            `;
+        } else {
+            const botName = botId ? this.aiModels[botId].name : 'AI Assistant';
+            const botIcon = botId ? this.aiModels[botId].icon : '🤖';
+            messageDiv.innerHTML = `
+                <div class="message-content">
+                    <strong>${botIcon} ${botName}:</strong>
+                    <div>${this.formatAnswer(content)}</div>
+                </div>
+                <div class="message-time">${currentTime}</div>
+            `;
+        }
+
+        this.chatMessages.appendChild(messageDiv);
+        this.scrollToBottom();
+
+        this.messages.push({
+            content,
+            sender,
+            botId,
+            timestamp: Date.now()
+        });
+    }
+
+    showTypingIndicator() {
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'message ai-message';
+        typingDiv.id = 'typing-indicator';
+        typingDiv.innerHTML = `
+            <div class="message-content typing-indicator">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        `;
+        this.chatMessages.appendChild(typingDiv);
+        this.scrollToBottom();
+    }
+
+    hideTypingIndicator() {
+        const typingIndicator = document.getElementById('typing-indicator');
+        if (typingIndicator) typingIndicator.remove();
+    }
+
+    generateAIResponse(userMessage, botId) {
+        const model = this.aiModels[botId];
+        const lowerMessage = userMessage.toLowerCase();
+
+        const faqAnswer = this.getFaqAnswer(userMessage, this.faqs, this.personalityFaqs);
+        if (faqAnswer) return faqAnswer;
+
+        if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
+            return `Hello! I'm ${model.name}, your AI assistant. ${model.description}. How can I help you today?`;
+        } else if (lowerMessage.includes('how are you')) {
+            return `I'm doing great, thank you for asking! As ${model.name}, I'm here and ready to assist you with any questions or tasks you might have.`;
+        } else if (lowerMessage.includes('what can you do')) {
+            return `As ${model.name}, I can help you with a wide variety of tasks. ${model.description}. What would you like to explore?`;
+        } else if (lowerMessage.includes('joke')) {
+            const jokes = {
+                'gpt-4': "Why don't web developers prefer dark mode? Because the light attracts bugs! *adjusts digital glasses analytically*",
+                'claude': "I'd be happy to share a joke! Why don't web developers prefer dark mode? Because the light attracts bugs! Hope that brought a smile to your face!",
+                'gemini': "Ooh, I love jokes! Here's a creative one: Why don't web developers prefer dark mode? Because the light attracts bugs! *sparkles with digital creativity*"
+            };
+            return jokes[botId] || jokes['gpt-4'];
+        } else if (lowerMessage.includes('thank')) {
+            return `You're very welcome! I'm glad I could help. Feel free to ask me anything else you'd like to know!`;
+        } else {
+            const responses = model.responses;
+            return responses[Math.floor(Math.random() * responses.length)];
+        }
+    }
+
+    saveChatHistory() {
+        // Use Firebase if user is authenticated, otherwise use localStorage as fallback
+        const user = this.auth.currentUser;
+        if (user) {
+            this.saveChatHistoryToFirebase();
+        } else {
+            // Fallback to localStorage for non-authenticated users
+            if (this.messages.length > 0) {
+                const existingChatIndex = this.chatHistory.findIndex(chat => chat.id === this.currentChatId);
+                const chatData = {
+                    id: this.currentChatId,
+                    title: this.messages[0].content.substring(0, 30) + (this.messages[0].content.length > 30 ? '...' : ''),
+                    messages: this.messages,
+                    lastUpdated: Date.now()
+                };
+
+                if (existingChatIndex !== -1) {
+                    this.chatHistory[existingChatIndex] = chatData;
+                } else {
+                    this.chatHistory.unshift(chatData);
+                }
+
+                this.chatHistory = this.chatHistory.slice(0, 20);
+                localStorage.setItem('chatHistory', JSON.stringify(this.chatHistory));
+                this.renderChatHistory();
+            }
+        }
+    }
+
+    renderChatHistory() {
+        this.chatHistoryList.innerHTML = '';
+        
+        this.chatHistory.forEach(chat => {
+            const chatItem = document.createElement('div');
+            chatItem.className = 'chat-history-item';
+            
+            // Check if this chat is currently active
+            if (chat.id === this.currentChatId) {
+                chatItem.classList.add('active');
+            }
+
+            const lastMessage = chat.messages[chat.messages.length - 1];
+            const preview = lastMessage ? lastMessage.content.substring(0, 50) + '...' : '';
+
+            chatItem.innerHTML = `
+                <div class="chat-item-content">
+                    <div class="chat-item-title">${chat.title}</div>
+                    <div class="chat-item-preview">${preview}</div>
+                </div>
+                <button class="delete-chat-btn" title="Delete chat">🗑️</button>
+            `;
+
+            // Add click event for loading chat
+            const chatContent = chatItem.querySelector('.chat-item-content');
+            chatContent.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Clear ALL existing content and load the selected chat
+                this.chatMessages.innerHTML = '';
+                if (this.compareResponses) {
+                    this.compareResponses.innerHTML = '';
+                }
+                if (this.compareContainer) {
+                    const compareResponses = this.compareContainer.querySelector('.compare-responses');
+                    if (compareResponses) {
+                        compareResponses.innerHTML = '';
+                    }
+                }
+                this.loadChat(chat);
+            });
+            
+            // Add click event for deleting chat
+            const deleteBtn = chatItem.querySelector('.delete-chat-btn');
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (confirm('Are you sure you want to delete this chat?')) {
+                    this.deleteChatFromFirebase(chat.id);
+                }
+            });
+
+            this.chatHistoryList.appendChild(chatItem);
+        });
+    }
+
+    loadChat(chat) {
+        this.currentChatId = chat.id;
+        this.messages = [...chat.messages]; // Create a copy to avoid reference issues
+        
+        // Clear ALL existing content - chat messages, compare responses, and welcome messages
+        this.chatMessages.innerHTML = '';
+        
+        // Also clear the compare responses container (where AI model cards are displayed)
+        if (this.compareResponses) {
+            this.compareResponses.innerHTML = '';
+        }
+        
+        // Clear any compare container content
+        if (this.compareContainer) {
+            // Keep the container but clear its content
+            const compareResponses = this.compareContainer.querySelector('.compare-responses');
+            if (compareResponses) {
+                compareResponses.innerHTML = '';
+            }
+        }
+        
+        // Remove any welcome message that might be present
+        const welcomeMessage = this.chatMessages.querySelector('.welcome-message');
+        if (welcomeMessage) {
+            welcomeMessage.remove();
+        }
+        
+        // Add each message to the display
+        this.messages.forEach(message => {
+            this.addMessageToDisplay(message);
+        });
+        
+        // Update the chat history display to show which chat is active
+        this.renderChatHistory();
+        
+        // Scroll to bottom
+        this.scrollToBottom();
+    }
+
+    addMessageToDisplay(message) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${message.sender}-message`;
+
+        const messageTime = new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        if (message.sender === 'user') {
+            messageDiv.innerHTML = `
+                <div class="message-content">${this.escapeHtml(message.content)}</div>
+                <div class="message-time">${messageTime}</div>
+            `;
+        } else {
+            const botName = message.botId ? this.aiModels[message.botId].name : 'AI Assistant';
+            const botIcon = message.botId ? this.aiModels[message.botId].icon : '🤖';
+            messageDiv.innerHTML = `
+                <div class="message-content">
+                    <strong>${botIcon} ${botName}:</strong>
+                    <div>${this.formatAnswer(message.content)}</div>
+                </div>
+                <div class="message-time">${messageTime}</div>
+            `;
+        }
+
+        this.chatMessages.appendChild(messageDiv);
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    initializeCarousel() {
+        if (!this.carouselTrack) return;
+
+        this.carouselTrack.innerHTML = '';
+
+        Object.keys(this.aiModels).forEach(botId => {
+            const model = this.aiModels[botId];
+            const botCard = document.createElement('div');
+            botCard.className = 'carousel-bot-card';
+            botCard.dataset.bot = botId;
+
+            botCard.innerHTML = `
+                <div class="carousel-bot-icon">${model.icon}</div>
+                <div class="carousel-bot-name">${model.name}</div>
+                <div class="carousel-bot-desc">${model.description.split(' ').slice(0, 3).join(' ')}...</div>
+            `;
+
+            botCard.addEventListener('click', () => this.toggleBotSelection(botId));
+            this.carouselTrack.appendChild(botCard);
+        });
+
+        this.updateCarouselSelection();
+    }
+
+    updateCarouselSelection() {
+        if (!this.carouselTrack) return;
+
+        const botCards = this.carouselTrack.querySelectorAll('.carousel-bot-card');
+        botCards.forEach(card => {
+            const isSelected = this.selectedBots.includes(card.dataset.bot);
+            card.classList.toggle('selected', isSelected);
+        });
+    }
+
+    scrollCarousel(direction) {
+        if (!this.carouselTrack) return;
+
+        const scrollAmount = 140;
+        const currentScroll = this.carouselTrack.scrollLeft;
+        
+        if (direction === 'next') {
+            this.carouselTrack.scrollTo({ left: currentScroll + scrollAmount, behavior: 'smooth' });
+        } else {
+            this.carouselTrack.scrollTo({ left: currentScroll - scrollAmount, behavior: 'smooth' });
+        }
+    }
+
+    scrollToBottom() {
+        setTimeout(() => {
+            if (this.chatMessages) this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+        }, 100);
+    }
+
+    showChatArea() {
+        this.authButtons.querySelector('.login-btn').style.display = 'none';
+        this.authButtons.querySelector('.signup-btn').style.display = 'none';
+        this.authButtons.querySelector('.logout-btn').style.display = 'block';
+        this.chatMessages.style.display = 'block';
+        this.messageInput.style.display = 'inline';
+        this.sendButton.style.display = 'flex';
+        
+        // Clear login message and show normal chat interface
+        this.chatMessages.innerHTML = '';
+        
+        // Only start a new chat if there's no current chat loaded
+        if (!this.currentChatId || this.messages.length === 0) {
+            this.startNewChat(); // This will show the welcome message for logged-in users
+        }
+    }
+
+    hideChatArea() {
+        this.authButtons.querySelector('.login-btn').style.display = 'block';
+        this.authButtons.querySelector('.signup-btn').style.display = 'block';
+        this.authButtons.querySelector('.logout-btn').style.display = 'none';
+        this.chatMessages.style.display = 'block';
+        this.messageInput.style.display = 'none';
+        this.sendButton.style.display = 'none';
+        
+        // Show login message
+        this.chatMessages.innerHTML = `
+            <div class="login-message">
+                <div class="login-message-content">
+                    <h2>🔐 Welcome to Prudence AI</h2>
+                    <p>Please login or signup to start chatting with our AI models.</p>
+                    <div class="login-actions">
+                        <button class="login-action-btn" onclick="document.querySelector('.login-btn').click()">Login</button>
+                        <button class="login-action-btn" onclick="document.querySelector('.signup-btn').click()">Sign Up</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    new ChatInterface();
+    initializeThemeToggle();
+});
