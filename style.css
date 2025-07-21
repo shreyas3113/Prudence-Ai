@@ -17,6 +17,7 @@ body {
     height: 100vh;
     width: 100%;
     background: rgba(26, 26, 46, 0.05);
+    overflow-y: hidden;
 }
 
 .sidebar {
@@ -381,6 +382,9 @@ body {
     padding: 1rem;
     background: rgba(255, 255, 255, 0.5);
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    overflow-y: auto;
+    max-height: 400px;
+    min-height: 180px;
 }
 
 .compare-container.active {
@@ -544,6 +548,9 @@ body {
 }
 
 .bot-carousel-container {
+    height: 100vh;
+    max-height: 100vh;
+    min-height: 0;
     background: rgba(26, 26, 46, 0.95);
     border-top: 1px solid rgba(0, 0, 0, 0.1);
     padding: 1rem;
@@ -551,6 +558,7 @@ body {
     margin: 0 auto;
     width: 100%;
     backdrop-filter: blur(10px);
+    height: 200px;
 }
 
 .carousel-header {
@@ -580,6 +588,8 @@ body {
     flex: 1;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    height: 130px;
+    margin: 0 auto;
 }
 
 .carousel-track::-webkit-scrollbar {
