@@ -163,6 +163,7 @@ body {
     background: rgba(26, 26, 46, 0.95);
     color: white;
     position: relative;
+    overflow-y: auto;
 }
 
 .chat-header {
