@@ -1,4 +1,40 @@
 export const aiModels = {
+    "llama4-maverick-17b-128e-instruct": {
+        name: "Llama 4 Maverick 17B 128E Instruct",
+        icon: "./llama.svg",
+        description: "Llama 4 Maverick 17B 128E Instruct model",
+        responses: ["Processing with Llama 4 Maverick 17B 128E Instruct...", "Here's my response from Llama 4 Maverick 17B 128E Instruct."]
+    },
+    "llama4-scout-17b-16e-instruct": {
+        name: "Llama 4 Scout 17B 16E Instruct",
+        icon: "./llama.svg",
+        description: "Llama 4 Scout 17B 16E Instruct model",
+        responses: ["Processing with Llama 4 Scout 17B 16E Instruct...", "Here's my response from Llama 4 Scout 17B 16E Instruct."]
+    },
+    "llama3-8b": {
+        name: "Llama 3.1 8B",
+        icon: "./llama.svg",
+        description: "Llama 3.1 8B model",
+        responses: ["Processing with Llama 3.1 8B...", "Here's my response from Llama 3.1 8B."]
+    },
+    "llama3-70b": {
+        name: "Llama 3.3 70B",
+        icon: "./llama.svg",
+        description: "Llama 3.3 70B model",
+        responses: ["Processing with Llama 3.3 70B...", "Here's my response from Llama 3.3 70B."]
+    },
+    "qwen-3-32b": {
+        name: "Qwen 3 32B",
+        icon: "./dragon.svg",
+        description: "Qwen 3 32B model",
+        responses: ["Processing with Qwen 3 32B...", "Here's my response from Qwen 3 32B."]
+    },
+    "qwen-3-235b-a22b": {
+        name: "Qwen 3 235B A22B",
+        icon: "./dragon.svg",
+        description: "Qwen 3 235B A22B model",
+        responses: ["Processing with Qwen 3 235B A22B...", "Here's my response from Qwen 3 235B A22B."]
+    },
     "gpt-4": { 
         name: "GPT-4", 
         icon: "🤖", 
@@ -17,42 +53,11 @@ export const aiModels = {
         description: "Creative and innovative thinking", 
         responses: ["Here's a creative take!", "Imagination is key. Let me think...", "Let's explore that idea."] 
     },
-    "llama3-8b": {
-        name: "Llama 3.1 8B",
-        icon: "./llama.svg",
-        description: "Llama 3.1 8B model",
-        responses: ["Processing with Llama 3.1 8B...", "Here's my response from Llama 3.1 8B."]
-    },
-    "llama3-70b": {
-        name: "Llama 3.3 70B",
-        icon: "./llama.svg",
-        description: "Llama 3.3 70B model",
-        responses: ["Processing with Llama 3.3 70B...", "Here's my response from Llama 3.3 70B."]
-    },
-    "llama4-scout-17b-16e-instruct": {
-        name: "Llama 4 Scout 17B 16E Instruct",
-        icon: "./llama.svg",
-        description: "Llama 4 Scout 17B 16E Instruct model",
-        responses: ["Processing with Llama 4 Scout 17B 16E Instruct...", "Here's my response from Llama 4 Scout 17B 16E Instruct."]
-    },
-    "llama4-maverick-17b-128e-instruct": {
-        name: "Llama 4 Maverick 17B 128E Instruct",
-        icon: "./llama.svg",
-        description: "Llama 4 Maverick 17B 128E Instruct model",
-        responses: ["Processing with Llama 4 Maverick 17B 128E Instruct...", "Here's my response from Llama 4 Maverick 17B 128E Instruct."]
-    },
-    "qwen-3-32b": {
-        name: "Qwen 3 32B",
-        icon: "./dragon.svg",
-        description: "Qwen 3 32B model",
-        responses: ["Processing with Qwen 3 32B...", "Here's my response from Qwen 3 32B."]
-    },
-    "qwen-3-235b-a22b": {
-        name: "Qwen 3 235B A22B",
-        icon: "./dragon.svg",
-        description: "Qwen 3 235B A22B model",
-        responses: ["Processing with Qwen 3 235B A22B...", "Here's my response from Qwen 3 235B A22B."]
-    },
+    
+    
+    
+    
+   
     "perplexity": { 
         name: "Perplexity", 
         icon: "📚", 
