@@ -23,7 +23,7 @@ class ChatInterface {
         // Enable compareMode by default
         this.compareMode = true;
         // Default selected bots for ensemble mode
-        this.selectedBots = ['gpt-4', 'claude', 'gemini'];
+        this.selectedBots = ['llama4-maverick-17b-128e-instruct', 'llama4-scout-17b-16e-instruct', 'llama3-8b'];
 
         // Always activate ensemble toggle and container
         if (this.compareToggle) this.compareToggle.classList.add('active');
@@ -418,7 +418,7 @@ class ChatInterface {
 
         // Ensure we have at least 2 bots selected for ensemble mode
         if (this.selectedBots.length < 2) {
-            this.selectedBots = ['gpt-4', 'claude'];
+            this.selectedBots = ['llama4-maverick-17b-128e-instruct', 'llama4-scout-17b-16e-instruct'];
         }
 
         this.updateBotSelection();
