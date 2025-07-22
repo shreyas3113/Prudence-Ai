@@ -8,6 +8,22 @@ import { cerebrasAPI } from './cerebras.js';
 
 import { ref, set, get, push, remove } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js";
 
+// Configure marked.js to use highlight.js for code blocks
+if (typeof marked !== 'undefined') {
+    marked.setOptions({
+        highlight: function(code, lang) {
+            if (window.hljs) {
+                if (lang && window.hljs.getLanguage(lang)) {
+                    return window.hljs.highlight(code, { language: lang }).value;
+                } else {
+                    return window.hljs.highlightAuto(code).value;
+                }
+            }
+            return code;
+        }
+    });
+}
+
 // Firebase initialization check
 const checkFirebaseInit = () => {
     try {
@@ -572,7 +588,10 @@ class ChatInterface {
             responseDiv.innerHTML = `
                 <div class="compare-response-header">
                     <div class="compare-response-icon">${renderModelIcon(this.aiModels[botId].icon)}</div>
-                    <div class="compare-response-name">${this.aiModels[botId].name}</div>
+                    <div class="compare-response-name">
+                        ${this.aiModels[botId].name}
+                        <button class="compare-popout-btn" title="Expand this response"> Expand</button>
+                    </div>
                 </div>
                 <div class="compare-response-content">
                     <div class="typing-indicator">
@@ -586,8 +605,15 @@ class ChatInterface {
 
             setTimeout(async () => {
                 const response = await this.generateAIResponse(message, botId);
-                responseDiv.querySelector('.compare-response-content').innerHTML = response;
-                
+                // Use formatAnswer to parse Markdown to HTML
+                const formattedResponse = this.formatAnswer(response);
+                responseDiv.querySelector('.compare-response-content').innerHTML = formattedResponse;
+                // Highlight code blocks if highlight.js is available
+                if (window.hljs) {
+                    responseDiv.querySelectorAll('.compare-response-content pre code').forEach((block) => {
+                        window.hljs.highlightElement(block);
+                    });
+                }
                 // Add the AI response to messages array for saving to Firebase
                 this.messages.push({
                     content: response,
@@ -595,13 +621,61 @@ class ChatInterface {
                     botId: botId,
                     timestamp: Date.now()
                 });
-                
+                // If popout modal is open for this bot, update it if it's showing this bot
+                const modal = document.getElementById('comparePopoutModal');
+                const contentArea = document.getElementById('comparePopoutContentArea');
+                if (modal && contentArea && modal.classList.contains('active')) {
+                    const nameDiv = contentArea.querySelector('.compare-response-name');
+                    if (nameDiv && nameDiv.textContent === this.aiModels[botId].name) {
+                        contentArea.innerHTML = `<div class='compare-response-header'><div class='compare-response-icon'>${renderModelIcon(this.aiModels[botId].icon)}</div><div class='compare-response-name'>${this.aiModels[botId].name}</div></div><div class='compare-response-content'>${formattedResponse}</div>`;
+                        // Highlight code blocks in modal
+                        if (window.hljs) {
+                            contentArea.querySelectorAll('.compare-response-content pre code').forEach((block) => {
+                                window.hljs.highlightElement(block);
+                            });
+                        }
+                    }
+                }
                 if (index === this.selectedBots.length - 1) {
                     this.sendButton.disabled = false;
                     // Save chat history after all responses are complete
                     this.saveChatHistory();
                 }
             }, Math.random() * 2000 + 1000 + (index * 500));
+
+            const popoutBtn = responseDiv.querySelector('.compare-popout-btn');
+            popoutBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const modal = document.getElementById('comparePopoutModal');
+                const contentArea = document.getElementById('comparePopoutContentArea');
+                if (modal && contentArea) {
+                    // Use formatAnswer for the modal as well
+                    const responseHtml = responseDiv.querySelector('.compare-response-content').innerHTML;
+                    contentArea.innerHTML = `<div class="compare-popout-header" style="display:flex;align-items:center;gap:0.7em;margin-bottom:1em;">
+        <span class="compare-popout-icon" style="font-size:2rem;">${renderModelIcon(this.aiModels[botId].icon)}</span>
+        <span class="compare-popout-name" style="font-weight:600;font-size:1.2rem;">${this.aiModels[botId].name}</span>
+    </div>
+    <div class='compare-response-content'>${responseHtml}</div>`;
+                    // Highlight code blocks in modal
+                    if (window.hljs) {
+                        contentArea.querySelectorAll('.compare-response-content pre code').forEach((block) => {
+                            window.hljs.highlightElement(block);
+                        });
+                    }
+                    modal.classList.add('active');
+                }
+            });
+
+            // Modal close event
+            const modal = document.getElementById('comparePopoutModal');
+            const closeBtn = document.getElementById('closeComparePopout');
+            if (modal && closeBtn) {
+                closeBtn.onclick = () => {
+                    modal.classList.remove('active');
+                    const contentArea = document.getElementById('comparePopoutContentArea');
+                    if (contentArea) contentArea.innerHTML = '';
+                };
+            }
         });
     }
 
@@ -981,4 +1055,17 @@ function renderModelIcon(icon) {
 document.addEventListener('DOMContentLoaded', () => {
     new ChatInterface();
     initializeThemeToggle();
+});
+
+// Close popup when clicking outside the modal content
+document.addEventListener('mousedown', function(event) {
+    const modal = document.getElementById('comparePopoutModal');
+    const content = document.querySelector('.compare-popout-content');
+    if (modal && content && modal.classList.contains('active')) {
+        if (!content.contains(event.target)) {
+            modal.classList.remove('active');
+            const contentArea = document.getElementById('comparePopoutContentArea');
+            if (contentArea) contentArea.innerHTML = '';
+        }
+    }
 });
