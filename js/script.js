@@ -552,7 +552,13 @@ class ChatInterface {
             this.compareContainer.style.overflow = '';
         }
 
-        this.addMessage(message, 'user');
+        // Save the user message to chat history (so it appears in history view)
+        this.messages.push({
+            content: message,
+            sender: 'user',
+            timestamp: Date.now()
+        });
+
         this.messageInput.value = '';
         this.sendButton.disabled = true;
 
@@ -580,8 +586,42 @@ class ChatInterface {
     }
 
     handleCompareMode(message) {
-        this.compareResponses.innerHTML = '';
-        
+        // Clear previous responses
+       // this.compareResponses.innerHTML = '';
+
+        // 1. Create a wrapper for this turn
+        const turnDiv = document.createElement('div');
+        turnDiv.className = 'compare-turn';
+
+        // 2. User message
+        const userMsgDiv = document.createElement('div');
+        userMsgDiv.className = 'compare-user-message';
+        // ... (add bubble and timestamp as before)
+        turnDiv.appendChild(userMsgDiv); // <--- This line was missing or misplaced
+
+        // Get the current time in HH:MM format
+        const currentTime = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        userMsgDiv.innerHTML = `
+            <div class="compare-user-bubble">
+                <span>${this.escapeHtml(message)}</span>
+            </div>
+            <div class="compare-user-time">${currentTime}</div>
+        `;
+
+        // 3. Grid for AI responses
+        const grid = document.createElement('div');
+        grid.className = 'compare-responses-grid';
+            // ... (add all responseDivs to grid)
+        turnDiv.appendChild(grid);
+
+        // 4. Append this turn to the main compareResponses container (do NOT clear it!)
+        this.compareResponses.appendChild(turnDiv);
+
+        // 5. Append this turn to the main compareResponses container (do NOT clear it!)
+        // this.compareResponses.appendChild(turnDiv); // This line was moved up
+
+        // Add all compare responses to the grid
         this.selectedBots.forEach((botId, index) => {
             const responseDiv = document.createElement('div');
             responseDiv.className = 'compare-response';
@@ -601,7 +641,7 @@ class ChatInterface {
                     </div>
                 </div>
             `;
-            this.compareResponses.appendChild(responseDiv);
+            grid.appendChild(responseDiv);
 
             setTimeout(async () => {
                 const response = await this.generateAIResponse(message, botId);
@@ -677,6 +717,12 @@ class ChatInterface {
                 };
             }
         });
+
+        // 4. Add the grid to the turn
+        // turnDiv.appendChild(grid); // This line was moved up
+
+        // 5. Append this turn to the main compareResponses container (do NOT clear it!)
+        // this.compareResponses.appendChild(turnDiv); // This line was moved up
     }
 
     addMessage(content, sender, botId = null) {
@@ -879,6 +925,11 @@ class ChatInterface {
 
     loadChat(chat) {
         this.currentChatId = chat.id;
+
+        // Hide the compare container when loading chat history
+        if (this.compareContainer) {
+            this.compareContainer.style.display = 'none';
+        }
         this.messages = [...chat.messages]; // Create a copy to avoid reference issues
         
         // Clear ALL existing content - chat messages, compare responses, and welcome messages
@@ -904,10 +955,37 @@ class ChatInterface {
             welcomeMessage.remove();
         }
         
-        // Add each message to the display
-        this.messages.forEach(message => {
-            this.addMessageToDisplay(message);
-        });
+        // DEBUG: Log messages array
+        console.log('Loaded messages:', this.messages);
+        
+        // Group messages into turns: [{user, timestamp, bots: [aiMsg, aiMsg, ...]}]
+        let i = 0;
+        let rendered = false;
+        while (i < this.messages.length) {
+            if (this.messages[i].sender === 'user') {
+                const userMsg = this.messages[i];
+                const bots = [];
+                let j = i + 1;
+                // Collect all following ai messages until the next user message or end
+                while (j < this.messages.length && this.messages[j].sender === 'ai') {
+                    bots.push(this.messages[j]);
+                    j++;
+                }
+                // Render this turn (even if bots is empty)
+                this.renderCompareTurn(userMsg, bots);
+                rendered = true;
+                i = j;
+            } else {
+                // If for some reason there's an ai message not after a user, skip it
+                i++;
+            }
+        }
+        // Fallback: if nothing rendered, show all messages as before
+        if (!rendered) {
+            this.messages.forEach(message => {
+                this.addMessageToDisplay(message);
+            });
+        }
         
         // Update the chat history display to show which chat is active
         this.renderChatHistory();
@@ -940,6 +1018,69 @@ class ChatInterface {
         }
 
         this.chatMessages.appendChild(messageDiv);
+    }
+
+    renderCompareTurn(userMsg, bots) {
+        // Create turn container
+        const turnDiv = document.createElement('div');
+        turnDiv.className = 'chat-turn';
+
+        // User message
+        const userDiv = document.createElement('div');
+        userDiv.className = 'chat-user-message';
+        userDiv.innerHTML = `
+            <div class="chat-user-bubble">${this.escapeHtml(userMsg.content)}</div>
+            <div class="chat-user-time">${new Date(userMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+        `;
+        turnDiv.appendChild(userDiv);
+
+        // Bot responses (use compare-response structure)
+        const botsDiv = document.createElement('div');
+        botsDiv.className = 'chat-bot-responses';
+        bots.forEach(botMsg => {
+            const botDiv = document.createElement('div');
+            botDiv.className = 'compare-response';
+            botDiv.innerHTML = `
+                <div class="compare-response-header">
+                    <div class="compare-response-icon">${renderModelIcon(botMsg.botId ? this.aiModels[botMsg.botId].icon : '🤖')}</div>
+                    <div class="compare-response-name">
+                        ${botMsg.botId ? this.aiModels[botMsg.botId].name : 'AI Assistant'}
+                        <button class="compare-popout-btn" title="Expand this response">Expand</button>
+                    </div>
+                </div>
+                <div class="compare-response-content">
+                    ${this.formatAnswer(botMsg.content)}
+                </div>
+            `;
+            // Add expand button logic
+            const popoutBtn = botDiv.querySelector('.compare-popout-btn');
+            popoutBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const modal = document.getElementById('comparePopoutModal');
+                const contentArea = document.getElementById('comparePopoutContentArea');
+                if (modal && contentArea) {
+                    contentArea.innerHTML = `
+                        <div class="compare-popout-header" style="display:flex;align-items:center;gap:0.7em;margin-bottom:1em;">
+                            <span class="compare-popout-icon" style="font-size:2rem;">${renderModelIcon(botMsg.botId ? this.aiModels[botMsg.botId].icon : '🤖')}</span>
+                            <span class="compare-popout-name" style="font-weight:600;font-size:1.2rem;">${botMsg.botId ? this.aiModels[botMsg.botId].name : 'AI Assistant'}</span>
+                        </div>
+                        <div class='compare-response-content'>${this.formatAnswer(botMsg.content)}</div>
+                    `;
+                    // Highlight code blocks in modal
+                    if (window.hljs) {
+                        contentArea.querySelectorAll('.compare-response-content pre code').forEach((block) => {
+                            window.hljs.highlightElement(block);
+                        });
+                    }
+                    modal.classList.add('active');
+                }
+            });
+            botsDiv.appendChild(botDiv);
+        });
+        turnDiv.appendChild(botsDiv);
+
+        // Add to chatMessages
+        this.chatMessages.appendChild(turnDiv);
     }
 
     escapeHtml(text) {
