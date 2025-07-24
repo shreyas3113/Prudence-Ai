@@ -77,6 +77,7 @@ class ChatInterface {
         this.messages = [];
         this.faqs = [];
         this.personalityFaqs = [];
+        this.modelTemperatures = {};
 
         this.aiModels = aiModels;
 
@@ -477,15 +478,45 @@ class ChatInterface {
                 const model = this.aiModels[botId];
                 if (!model) return;
 
+                // Get current temperature for this bot, or default to 0.7
+                const temp = this.modelTemperatures[botId] !== undefined ? this.modelTemperatures[botId] : 0.7;
+
                 const card = document.createElement('div');
-                card.className = 'bot-card selected';
+                card.className = 'carousel-bot-card selected';
                 card.dataset.bot = botId;
                 card.innerHTML = `
-                    <div class="bot-icon">${renderModelIcon(model.icon)}</div>
-                    <div class="bot-name">${model.name}</div>
+                    <div class="carousel-bot-icon">${renderModelIcon(model.icon)}</div>
+                    <div class="carousel-bot-name">${model.name}</div>
                     <div class="bot-description">${model.description}</div>
+                    <div class="bot-temp-slider" style="display:none;">
+                        <label style="font-size:0.95em;">Temperature:
+                            <input type="range" min="0" max="1.5" step="0.01" value="${temp}" class="temperature-slider" data-botid="${botId}">
+                            <span class="temperature-value">${temp}</span>
+                        </label>
+                    </div>
                 `;
                 botsGrid.appendChild(card);
+
+                // Show slider on hover
+                card.addEventListener('mouseenter', () => {
+                    const sliderDiv = card.querySelector('.bot-temp-slider');
+                    if (sliderDiv) sliderDiv.style.display = 'block';
+                });
+                card.addEventListener('mouseleave', () => {
+                    const sliderDiv = card.querySelector('.bot-temp-slider');
+                    if (sliderDiv) sliderDiv.style.display = 'none';
+                });
+
+                // Temperature slider logic
+                const slider = card.querySelector('.temperature-slider');
+                const valueSpan = card.querySelector('.temperature-value');
+                if (slider && valueSpan) {
+                    slider.addEventListener('input', (e) => {
+                        const val = parseFloat(slider.value);
+                        this.modelTemperatures[botId] = val;
+                        valueSpan.textContent = val;
+                    });
+                }
             });
 
             if (this.selectedBots.length === 0) {
@@ -597,7 +628,7 @@ class ChatInterface {
         const userMsgDiv = document.createElement('div');
         userMsgDiv.className = 'compare-user-message';
         // ... (add bubble and timestamp as before)
-        turnDiv.appendChild(userMsgDiv); // <--- This line was missing or misplaced
+        turnDiv.appendChild(userMsgDiv);
 
         // Get the current time in HH:MM format
         const currentTime = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -612,14 +643,10 @@ class ChatInterface {
         // 3. Grid for AI responses
         const grid = document.createElement('div');
         grid.className = 'compare-responses-grid';
-            // ... (add all responseDivs to grid)
         turnDiv.appendChild(grid);
 
         // 4. Append this turn to the main compareResponses container (do NOT clear it!)
         this.compareResponses.appendChild(turnDiv);
-
-        // 5. Append this turn to the main compareResponses container (do NOT clear it!)
-        // this.compareResponses.appendChild(turnDiv); // This line was moved up
 
         // Add all compare responses to the grid
         this.selectedBots.forEach((botId, index) => {
@@ -629,7 +656,7 @@ class ChatInterface {
                 <div class="compare-response-header">
                     <div class="compare-response-icon">${renderModelIcon(this.aiModels[botId].icon)}</div>
                     <div class="compare-response-name">
-                        ${this.aiModels[botId].name}
+                        <span class="bot-name-text">${this.aiModels[botId].name}</span>
                         <button class="compare-popout-btn" title="Expand this response"> Expand</button>
                     </div>
                 </div>
@@ -644,7 +671,9 @@ class ChatInterface {
             grid.appendChild(responseDiv);
 
             setTimeout(async () => {
-                const response = await this.generateAIResponse(message, botId);
+                // Use the selected temperature for this bot
+                const temperature = this.modelTemperatures[botId] !== undefined ? this.modelTemperatures[botId] : 0.7;
+                const response = await this.generateAIResponse(message, botId, temperature);
                 // Use formatAnswer to parse Markdown to HTML
                 const formattedResponse = this.formatAnswer(response);
                 responseDiv.querySelector('.compare-response-content').innerHTML = formattedResponse;
@@ -717,16 +746,6 @@ class ChatInterface {
                 };
             }
         });
-
-        // 4. Add the grid to the turn
-        // turnDiv.appendChild(grid); // This line was moved up
-
-        // 5. Append this turn to the main compareResponses container (do NOT clear it!)
-        // this.compareResponses.appendChild(turnDiv); // This line was moved up
-
-        if (this.compareContainer) {
-            this.compareContainer.scrollTop = this.compareContainer.scrollHeight;
-        }
     }
 
     addMessage(content, sender, botId = null) {
@@ -783,7 +802,8 @@ class ChatInterface {
         if (typingIndicator) typingIndicator.remove();
     }
 
-    async generateAIResponse(userMessage, botId) {
+    // Update generateAIResponse to accept temperature
+    async generateAIResponse(userMessage, botId, temperatureOverride) {
         const model = this.aiModels[botId];
         const lowerMessage = userMessage.toLowerCase();
 
@@ -805,7 +825,7 @@ class ChatInterface {
                 console.log('🤖 Calling Cerebras API for model:', botId);
                 const cerebrasResult = await cerebrasAPI.generateResponse(userMessage, {
                     maxTokens: 1000,
-                    temperature: 0.7,
+                    temperature: temperatureOverride !== undefined ? temperatureOverride : (this.modelTemperatures[botId] || 0.7),
                     model: botId
                 });
                 if (cerebrasResult.success) {
@@ -1100,6 +1120,7 @@ class ChatInterface {
 
         Object.keys(this.aiModels).forEach(botId => {
             const model = this.aiModels[botId];
+            const temp = this.modelTemperatures && this.modelTemperatures[botId] !== undefined ? this.modelTemperatures[botId] : 0.7;
             const botCard = document.createElement('div');
             botCard.className = 'carousel-bot-card';
             botCard.dataset.bot = botId;
@@ -1107,7 +1128,36 @@ class ChatInterface {
             botCard.innerHTML = `
                 <div class="carousel-bot-icon">${renderModelIcon(model.icon)}</div>
                 <div class="carousel-bot-name">${model.name}</div>
+                <div class="bot-temp-slider" style="display:none;">
+                    <label style="font-size:0.95em;">Temperature:
+                        <input type="range" min="0" max="1.5" step="0.01" value="${temp}" class="temperature-slider" data-botid="${botId}">
+                        <span class="temperature-value">${temp}</span>
+                    </label>
+                </div>
             `;
+
+            // Show slider on hover for selected cards only
+            botCard.addEventListener('mouseenter', () => {
+                if (botCard.classList.contains('selected')) {
+                    const sliderDiv = botCard.querySelector('.bot-temp-slider');
+                    if (sliderDiv) sliderDiv.style.display = 'block';
+                }
+            });
+            botCard.addEventListener('mouseleave', () => {
+                const sliderDiv = botCard.querySelector('.bot-temp-slider');
+                if (sliderDiv) sliderDiv.style.display = 'none';
+            });
+
+            // Temperature slider logic
+            const slider = botCard.querySelector('.temperature-slider');
+            const valueSpan = botCard.querySelector('.temperature-value');
+            if (slider && valueSpan) {
+                slider.addEventListener('input', (e) => {
+                    const val = parseFloat(slider.value);
+                    this.modelTemperatures[botId] = val;
+                    valueSpan.textContent = val;
+                });
+            }
 
             botCard.addEventListener('click', () => this.toggleBotSelection(botId));
             this.carouselTrack.appendChild(botCard);
