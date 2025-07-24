@@ -464,7 +464,7 @@ body {
 }
 
 .compare-container {
-    display: none;
+    display: block;
     padding: 1rem;
     background: rgba(255, 255, 255, 0.5);
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
@@ -1391,8 +1391,8 @@ body.light-mode .delete-chat-btn:hover {
     background: white;
     color: #222;
     border-radius: 1.5rem;
-    max-width: 600px;
-    width: 90vw;
+    max-width: 900px;
+    width: 98vw;
     max-height: 90vh;
     height: 90vh;
     overflow: auto;
