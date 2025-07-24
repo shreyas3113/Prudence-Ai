@@ -555,6 +555,55 @@ body {
     height: 100px;
 }
 
+/*temperature slider */
+.carousel-bot-card {
+    position: relative;
+    /* ...other styles... */
+}
+
+.bot-temp-slider {
+    position: absolute;
+    left: 50%;
+    bottom: 100%; /* Position above the card */
+    transform: translateX(-50%) translateY(-8px); /* Center horizontally and add a little gap */
+    z-index: 9999;
+    background: #fff;
+    border-radius: 0.7em;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    padding: 0.5em 1em;
+    display: none;
+    min-width: 180px;
+    text-align: center;
+    
+}
+
+.carousel-track,
+.carousel-wrapper {
+    overflow: visible !important;
+}
+
+.carousel-bot-card .bot-temp-slider {
+    margin-top: 0.5em;
+    display: none;
+    transition: opacity 0.2s;
+}
+.carousel-bot-card.selected:hover .bot-temp-slider {
+    display: block !important;
+}
+
+.temperature-slider {
+    width: 90px;
+    margin: 0 0.5em;
+    vertical-align: middle;
+}
+
+.temperature-value {
+    font-weight: 600;
+    font-size: 1em;
+    margin-left: 0.3em;
+}
+
+
 .chat-messages {
     flex: 1;
     overflow-y: auto;
@@ -739,7 +788,7 @@ body {
 }
 
 .bot-carousel-container {
-    height: 100px;
+    height: 150px;
     max-height: 100px;
     min-height: 0;
     background: rgba(26, 26, 46, 0.95);
@@ -779,7 +828,7 @@ body {
     flex: 1;
     scrollbar-width: none;
     -ms-overflow-style: none;
-    height: 130px;
+    height: 150px;
     margin: 0 auto;
 }
 
