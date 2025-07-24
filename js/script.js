@@ -723,6 +723,10 @@ class ChatInterface {
 
         // 5. Append this turn to the main compareResponses container (do NOT clear it!)
         // this.compareResponses.appendChild(turnDiv); // This line was moved up
+
+        if (this.compareContainer) {
+            this.compareContainer.scrollTop = this.compareContainer.scrollHeight;
+        }
     }
 
     addMessage(content, sender, botId = null) {
