@@ -1130,23 +1130,44 @@ class ChatInterface {
                 <div class="carousel-bot-name">${model.name}</div>
                 <div class="bot-temp-slider" style="display:none;">
                     <label style="font-size:0.95em;">Temperature:
-                        <input type="range" min="0" max="1.5" step="0.01" value="${temp}" class="temperature-slider" data-botid="${botId}">
+                        <input type="range" min="0" max="1" step="0.01" value="${temp}" class="temperature-slider" data-botid="${botId}">
                         <span class="temperature-value">${temp}</span>
                     </label>
                 </div>
             `;
 
-            // Show slider on hover for selected cards only
+            // Show slider on hover for selected cards only, with 1s delay before hiding
+            let hideSliderTimeout = null;
             botCard.addEventListener('mouseenter', () => {
                 if (botCard.classList.contains('selected')) {
                     const sliderDiv = botCard.querySelector('.bot-temp-slider');
-                    if (sliderDiv) sliderDiv.style.display = 'block';
+                    if (sliderDiv) {
+                        clearTimeout(hideSliderTimeout);
+                        sliderDiv.style.display = 'block';
+                    }
                 }
             });
             botCard.addEventListener('mouseleave', () => {
                 const sliderDiv = botCard.querySelector('.bot-temp-slider');
-                if (sliderDiv) sliderDiv.style.display = 'none';
+                if (sliderDiv) {
+                    hideSliderTimeout = setTimeout(() => {
+                        sliderDiv.style.display = 'none';
+                    }, 90); // 1 second delay
+                }
             });
+            // Also keep the slider visible if the mouse enters the slider itself
+            const sliderDiv = botCard.querySelector('.bot-temp-slider');
+            if (sliderDiv) {
+                sliderDiv.addEventListener('mouseenter', () => {
+                    clearTimeout(hideSliderTimeout);
+                    sliderDiv.style.display = 'block';
+                });
+                sliderDiv.addEventListener('mouseleave', () => {
+                    hideSliderTimeout = setTimeout(() => {
+                        sliderDiv.style.display = 'none';
+                    }, 1000); // 1 second delay
+                });
+            }
 
             // Temperature slider logic
             const slider = botCard.querySelector('.temperature-slider');
@@ -1157,6 +1178,14 @@ class ChatInterface {
                     this.modelTemperatures[botId] = val;
                     valueSpan.textContent = val;
                 });
+                // Prevent slider interaction from toggling bot selection
+                slider.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+                slider.addEventListener('click', (e) => { e.stopPropagation(); });
+            }
+            const label = botCard.querySelector('.bot-temp-slider label');
+            if (label) {
+                label.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+                label.addEventListener('click', (e) => { e.stopPropagation(); });
             }
 
             botCard.addEventListener('click', () => this.toggleBotSelection(botId));
