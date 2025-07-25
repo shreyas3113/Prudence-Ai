@@ -577,6 +577,23 @@ body {
     
 }
 
+.carousel-bot-card .bot-temp-slider {
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    transform: translateX(-50%) translateY(-8px);
+    z-index: 9999;
+    background: #fff;
+    color: #222;
+    border-radius: 0.7em;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    padding: 0.5em 1em;
+    min-width: 180px;
+    text-align: center;
+    border: 1px solid #ddd;
+    display: none;
+}
+
 .carousel-track,
 .carousel-wrapper {
     overflow: visible !important;
